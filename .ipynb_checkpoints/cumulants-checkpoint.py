@@ -1,7 +1,3 @@
-"""
-theoretical cumulants computation
-"""
-
 import torch
 
 
@@ -120,6 +116,17 @@ def compute_cumulants(R, L, exo_baseline, cov_obs=None, return_full_K=False):
     else:  # return only K[ijj]
         K = torch.diagonal(K, dim1=0, dim2=1)
         return C, K
-    
-    
-    
+
+
+# def compute_compressed_cumulants(C, K):
+#     """_summary_
+
+#     Args:
+#         C (tensor): 4 x 4
+#         K (tensor): 4 x 4 x 4
+#     """
+#     M = torch.Tensor([[1, -1, 0, 0], [0, 0, 1, -1]])
+#     C_2 = torch.matmul(torch.matmul(M, C), torch.transpose(M, 0, 1))
+#     K_2 = torch.matmul(torch.matmul(M, K), torch.transpose(M, 0, 1))
+#     K_2 = torch.transpose(torch.matmul(M, torch.transpose(K_2, 0, 1)), 0, 1)
+#     return C_2, K_2

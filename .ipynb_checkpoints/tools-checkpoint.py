@@ -8,7 +8,6 @@ import pickle
 
 import numpy as np
 import pandas as pd
-from tick.base import TimeFunction
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
@@ -89,31 +88,3 @@ def print_info(n_iter: int, print_every: int, obj: float, rel_obj: float):
         )
         print(msg)
         return msg
-
-
-def timefunc(ts_list: list, dt: float, max_time: float = None):
-    """_summary_
-
-    Args:
-        ts_list (list): each element in the list is a list of timestamps, representing event times of a single node
-        dt (float): subsampling interval
-
-    Returns:
-        list: list of TimeFunction objects
-    """
-    timefuncs = []
-    if max_time is None:
-        max_time = max([ts[-1] for ts in ts_list]) + dt
-
-    for ts in ts_list:
-        ts = np.insert(ts, 0, 0)
-        ts = np.insert(ts, len(ts), max_time + dt)
-
-        df = pd.DataFrame({"time": ts, "cum": range(0, len(ts))})
-        timef = TimeFunction(
-            (df.time.values, df.cum.values),
-            dt=dt,
-            inter_mode=TimeFunction.InterConstRight,
-        )
-        timefuncs.append(timef)
-    return timefuncs

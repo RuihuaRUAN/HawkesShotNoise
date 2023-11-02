@@ -2,16 +2,13 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import torch
-
-# from numba import njit
 from scipy.linalg import norm, qr, sqrtm
 from tick.hawkes import HawkesCumulantMatching
 from tick.hawkes.inference.base import LearnerHawkesNoParam
-from tqdm.auto import tqdm
 
 from cumulants import compute_cumulants
 from HawkesShotNoise import Hawkes_Shot_Noise
-from tools import print_info, timefunc
+from tools import print_info
 
 
 class Hawkes_Shot_Noise_Estimate(Hawkes_Shot_Noise):
@@ -42,66 +39,22 @@ class Hawkes_Shot_Noise_Estimate(Hawkes_Shot_Noise):
     def n_realizations(self):
         return len(self.timestamps)
 
-    def moving_mean_intensity(self, day_times: list, loc_bins: int):
-        """every 1 second, compute the local mean intensity
-
-        Args:
-            day_times (list): _description_
-            loc_bins (int): _description_
-
-        Returns:
-            dictionary: _description_
-        """
-
-        tfs = timefunc(day_times, 1, self.end_time)  # 1 --> every 1 second
-        ms = np.zeros((self.end_time - 2 * loc_bins, self.dim_endo))
-
-        for t in range(self.end_time - 2 * loc_bins):
-            for i, tf in enumerate(tfs):
-                ms[t, i] = (tf.value(t + 2 * loc_bins) - tf.value(t)) / (2 * loc_bins)
-        center_ts = np.arange(self.end_time).astype(int)
-        ms = np.pad(ms, ((loc_bins, loc_bins), (0, 0)), "edge")
-
-        return dict(zip(center_ts, ms))
-
-    def estimate_cumulants(self, H: float, loc_bins: float = 0):
+    def estimate_cumulants(self, H):
         """_summary_
 
         Args:
-            H (float): _description_
-            loc_bins (float, optional): _description_. Defaults to None.
+            H (_type_): _description_
         """
-        if loc_bins == 0:
-            nphc = HawkesCumulantMatching(H)
-            LearnerHawkesNoParam.fit(
-                nphc,
-                self.timestamps,
-                end_times=np.ones(self.n_realizations) * self.end_time,
-            )
-            nphc.compute_cumulants()
-            self.L_emp = nphc.mean_intensity
-            self.C_emp = nphc.covariance
-            self.K_emp = nphc.skewness
-
-        else:
-            d = self.dim_endo
-            self.C_emp = np.zeros((d, d))
-            self._J = np.zeros((self.n_realizations, d, d))
-
-            for day_times in tqdm(self.timestamps):
-                day_C = np.zeros((d, d))
-                t_to_m = self.moving_mean_intensity(day_times, loc_bins)
-                for i, ts_i in enumerate(day_times):
-                    for t in ts_i:
-                        if t < H or t > self.end_time - H:
-                            continue
-                        for j, ts_j in enumerate(day_times):
-                            mean_j = t_to_m[int(t)][j]
-                            dN_j = np.sum(ts_j < t + H) - np.sum(ts_j < t - H)
-                            dN_j -= 2 * H * mean_j
-                            day_C[i, j] += dN_j
-                day_C /= self.end_time - 2 * H
-                self.C_emp += day_C / self.n_realizations
+        nphc = HawkesCumulantMatching(H)
+        LearnerHawkesNoParam.fit(
+            nphc,
+            self.timestamps,
+            end_times=np.ones(self.n_realizations) * self.end_time,
+        )
+        nphc.compute_cumulants()
+        self.L_emp = nphc.mean_intensity
+        self.C_emp = nphc.covariance
+        self.K_emp = nphc.skewness
 
     def approximate_optimal_cs_ratio(self):
         """

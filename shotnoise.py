@@ -102,23 +102,6 @@ class Hawkes_Shot_Noise:
     def n_realizations(self):
         return len(self.timestamps)
 
-    # def estimate_cumulants(self, H):
-    #     nphc = HawkesCumulantMatching(H, tol=1e-10)
-    #     LearnerHawkesNoParam.fit(
-    #         nphc, self.timestamps, end_times=np.ones(self.n_realizations) * self.T
-    #     )
-    #     nphc.compute_cumulants()
-    #     self.L_emp = nphc.mean_intensity
-    #     self.C_emp = nphc.covariance
-    #     self.K_emp = nphc.skewness
-
-    # @abstractmethod
-    # def set_variables(self):
-    #     pass
-
-    # @abstractmethod
-    # def objective(self):
-    #     pass
 """
 """
 from abc import ABC, abstractmethod
@@ -222,21 +205,3 @@ class Hawkes_Shot_Noise:
     @property
     def n_realizations(self):
         return len(self.timestamps)
-
-    # def estimate_cumulants(self, H):
-    #     nphc = HawkesCumulantMatching(H, tol=1e-10)
-    #     LearnerHawkesNoParam.fit(
-    #         nphc, self.timestamps, end_times=np.ones(self.n_realizations) * self.T
-    #     )
-    #     nphc.compute_cumulants()
-    #     self.L_emp = nphc.mean_intensity
-    #     self.C_emp = nphc.covariance
-    #     self.K_emp = nphc.skewness
-
-    # @abstractmethod
-    # def set_variables(self):
-    #     pass
-
-    # @abstractmethod
-    # def objective(self):
-    #     pass
