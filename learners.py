@@ -4,9 +4,150 @@
 
 import numpy as np
 import torch
+from scipy.linalg import norm, qr, sqrtm
+
 from cumulants import compute_cumulants
 from estimate import Hawkes_Shot_Noise_Estimate
-from scipy.linalg import norm, qr, sqrtm
+from tools import print_info, timefunc
+
+
+class general_R(Hawkes_Shot_Noise_Estimate):
+    """_summary_
+
+    Args:
+        Hawkes_Shot_Noise_Estimate (_type_): _description_
+    """
+
+    def __init__(self, dim_endo: int, dim_exo: int, device="cpu"):
+        super().__init__(dim_endo, dim_exo, device)
+
+    def set_init_values(self, R=None, exo_baseline=None):
+        if R is None:
+            self.init_R = self.starting_point_R()
+        else:
+            self.init_R = R
+        if exo_baseline is None:
+            self.init_exo_baseline = np.zeros(self.dim_exo)
+        else:
+            self.init_exo_baseline = exo_baseline
+
+    def set_variables(self):
+        ## variables
+        self.var_R = torch.tensor(
+            self.init_R, requires_grad=True, device=self.device, dtype=torch.float32
+        )
+        self.var_exo_mu = torch.tensor(
+            self.init_exo_baseline,
+            requires_grad=True,
+            device=self.device,
+            dtype=torch.float32,
+        )
+        self.variables = [self.var_R, self.var_exo_mu]
+
+    def set_optimizer(self, learning_rate=1e-3):
+        self.optimizer = torch.optim.Adam(self.variables, lr=learning_rate)
+
+    def objective(self, var_R=None, var_exo_mu=None):
+        if var_R is None:
+            var_R = self.var_R
+        if var_exo_mu is None:
+            var_exo_mu = self.var_exo_mu
+
+        cs_ratio = self.approximate_optimal_cs_ratio()
+        variable_covariance, variable_skewness = compute_cumulants(
+            var_R, torch.tensor(self.L_emp, dtype=torch.float32), var_exo_mu
+        )
+        covariance_divergence = torch.sum(
+            torch.square(
+                variable_covariance - torch.tensor(self.C_emp, dtype=torch.float32)
+            )
+        )
+        skewness_divergence = torch.sum(
+            torch.square(
+                variable_skewness - torch.tensor(self.K_emp, dtype=torch.float32)
+            )
+        )
+        loss = cs_ratio * covariance_divergence + (1 - cs_ratio) * skewness_divergence
+
+        ## non-negative constraint
+        relu = torch.nn.ReLU()
+        endo_baseline = torch.matmul(
+            torch.linalg.inv(var_R),
+            torch.tensor(self.L_emp, dtype=torch.float32),
+        ) - torch.cat((var_exo_mu, var_exo_mu), axis=0)
+        mux_loss = torch.sum(torch.square(relu(-var_exo_mu)))
+        R_loss = torch.sum(torch.square(relu(-var_R)))
+        # mu_loss = torch.sum(torch.square(relu(-endo_baseline)))
+        return loss + (mux_loss + R_loss) * 1e6
+
+    @property
+    def R(self):
+        return self.var_R.detach().numpy()
+
+    @property
+    def endo_baseline(self):
+        endo_baseline = torch.matmul(
+            torch.linalg.inv(self.var_R.detach()),
+            torch.tensor(self.L_emp, dtype=torch.float32),
+        ) - torch.cat((self.var_exo_mu.detach(), self.var_exo_mu.detach()), axis=0)
+        return endo_baseline.numpy()
+
+    @property
+    def exo_baseline(self):
+        return self.var_exo_mu.detach().numpy()
+
+    @property
+    def adjacency(self):
+        return (
+            torch.eye(self.dim_endo) - torch.linalg.inv(self.var_R.detach())
+        ).numpy()
+
+    def fit(
+        self,
+        max_iter: int = 1000,
+        learning_rate: float = 1e-3,
+        tol: float = 1e-8,
+        print_every: int = 100,
+    ):
+        """Fit the model according to the given training data.
+
+        Args:
+            max_iter (int, optional): Defaults to 1000.
+                Maximum number of iterations of the       solver.
+            learning_rate (float, optional): Defaults to 1e-3.
+                Initial step size used for learning.
+            tol (float, optional): Defaults to 1e-8.
+                The tolerance of the solver (iterations stop when the stopping criterion is below it). If not reached the solver does ``max_iter`` iterations.
+            print_every (int, optional): Defaults to 100.
+                Print history information when ``n_iter`` (iteration number) is a multiple of ``print_every``.
+        """
+        self.set_optimizer(learning_rate)
+        min_cost = np.inf
+        best_var = [self.var_R.detach().numpy(), self.var_exo_mu.detach().numpy()]
+        for _iter in range(max_iter):
+            self.optimizer.zero_grad()
+            loss = self.objective()
+            loss.backward()
+            self.optimizer.step()
+            if _iter == 0:
+                prev_obj = loss.item()
+            else:
+                rel_obj = abs(prev_obj - loss.item()) / abs(prev_obj)
+                prev_obj = loss.item()
+                converged = rel_obj < tol
+                print_info(_iter - 1, print_every, loss.item(), rel_obj)
+                if converged:
+                    print_info(_iter - 1, 1, loss.item(), rel_obj)
+                    break
+
+            if loss.item() < min_cost:
+                min_cost = loss.item()
+                best_var = [
+                    self.var_R.detach().numpy(),
+                    self.var_exo_mu.detach().numpy(),
+                ]
+
+        print_info(max_iter, 1, loss.item(), rel_obj)
 
 
 class general_phi(Hawkes_Shot_Noise_Estimate):
